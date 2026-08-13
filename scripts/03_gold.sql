@@ -70,7 +70,23 @@ CREATE TABLE gold_daily_sales_summary (
 -- ============================================================================
 
 -- CONCEPT #6, #7, #8, #10: Aggregate Functions with JOINs and GROUP BY/HAVING
-INSERT INTO gold_customer_metrics
+-- Explicitly mapping the 14 valid target columns
+INSERT INTO gold_customer_metrics (
+    customer_id,
+    first_name,
+    last_name,
+    email,
+    country,
+    total_purchases,
+    total_spent,
+    average_order_value,
+    last_purchase_date,
+    customer_status,
+    customer_segment,
+    registration_month,
+    registration_year,
+    created_at
+)
 SELECT 
     c.customer_id,
     c.first_name,
@@ -79,11 +95,9 @@ SELECT
     c.country,
     COUNT(s.transaction_id) AS total_purchases,
     ISNULL(SUM(s.total_amount), 0) AS total_spent,
-    -- CONCEPT #6: AGGREGATE FUNCTIONS
     ROUND(ISNULL(AVG(s.total_amount), 0), 2) AS average_order_value,
     MAX(s.transaction_date) AS last_purchase_date,
     c.status AS customer_status,
-    -- CONCEPT #9: CASE - Customer Segmentation
     CASE 
         WHEN ISNULL(SUM(s.total_amount), 0) > 2000 THEN 'Gold'
         WHEN ISNULL(SUM(s.total_amount), 0) > 1000 THEN 'Silver'
@@ -92,17 +106,35 @@ SELECT
     END AS customer_segment,
     MONTH(c.registration_date) AS registration_month,
     YEAR(c.registration_date) AS registration_year,
-    GETDATE(),
-    GETDATE(),
-    NULL
+    GETDATE() AS created_at
 FROM silver_customers c
-LEFT JOIN silver_sales s ON c.customer_id = s.customer_id AND s.order_status = 'Completed'
--- CONCEPT #8: HAVING - Filter aggregated results
-GROUP BY c.customer_id, c.first_name, c.last_name, c.email, c.country, c.status, c.registration_date
-HAVING COUNT(s.transaction_id) >= 0; -- Include all customers
+LEFT JOIN silver_sales s 
+    ON c.customer_id = s.customer_id 
+   AND s.order_status = 'Completed'
+GROUP BY 
+    c.customer_id, 
+    c.first_name, 
+    c.last_name, 
+    c.email, 
+    c.country, 
+    c.status, 
+    c.registration_date;
 
 -- CONCEPT #10: JOIN with aggregate functions
-INSERT INTO gold_product_metrics
+-- Explicitly mapping the 11 valid target columns
+INSERT INTO gold_product_metrics (
+    product_id,
+    product_name,
+    category,
+    unit_price,
+    total_units_sold,
+    total_revenue,
+    average_units_per_order,
+    stock_status,
+    times_purchased,
+    last_sale_date,
+    supplier_country
+)
 SELECT 
     p.product_id,
     p.product_name,
@@ -111,7 +143,8 @@ SELECT
     ISNULL(SUM(s.quantity_sold), 0) AS total_units_sold,
     ISNULL(SUM(s.total_amount), 0) AS total_revenue,
     CASE 
-        WHEN COUNT(s.transaction_id) > 0 THEN ROUND(CAST(SUM(s.quantity_sold) AS DECIMAL) / COUNT(s.transaction_id), 2)
+        WHEN COUNT(s.transaction_id) > 0 
+        THEN ROUND(CAST(SUM(s.quantity_sold) AS DECIMAL(10, 2)) / COUNT(s.transaction_id), 2)
         ELSE 0
     END AS average_units_per_order,
     CASE 
@@ -122,11 +155,18 @@ SELECT
     END AS stock_status,
     COUNT(s.transaction_id) AS times_purchased,
     MAX(s.transaction_date) AS last_sale_date,
-    p.supplier_country,
-    GETDATE()
+    p.supplier_country
 FROM silver_products p
-LEFT JOIN silver_sales s ON p.product_id = s.product_id AND s.order_status = 'Completed'
-GROUP BY p.product_id, p.product_name, p.category, p.unit_price, p.stock_quantity, p.supplier_country;
+LEFT JOIN silver_sales s 
+    ON p.product_id = s.product_id 
+   AND s.order_status = 'Completed'
+GROUP BY 
+    p.product_id, 
+    p.product_name, 
+    p.category, 
+    p.unit_price, 
+    p.stock_quantity, 
+    p.supplier_country;
 
 -- CONCEPT #6, #7, #8, #10: Daily Sales Summary
 INSERT INTO gold_daily_sales_summary
