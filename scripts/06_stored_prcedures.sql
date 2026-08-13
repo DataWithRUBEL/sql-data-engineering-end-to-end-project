@@ -129,19 +129,38 @@ END;
 GO
 
 -- Stored Procedure: Update Customer Metrics (Refresh Gold Layer)
-CREATE PROCEDURE sp_refresh_customer_metrics
+-- Stored Procedure: Update Customer Metrics (Refresh Gold Layer)
+CREATE OR ALTER PROCEDURE sp_refresh_customer_metrics
     @customer_id INT = NULL
 AS
 BEGIN
+    SET NOCOUNT ON;
+
     BEGIN TRY
-        BEGIN TRANSACTION
+        BEGIN TRANSACTION;
         
         -- If specific customer ID provided, update only that customer
         IF @customer_id IS NOT NULL
         BEGIN
-            DELETE FROM gold_customer_metrics WHERE customer_id = @customer_id;
+            DELETE FROM gold_customer_metrics 
+            WHERE customer_id = @customer_id;
             
-            INSERT INTO gold_customer_metrics
+            INSERT INTO gold_customer_metrics (
+                customer_id,
+                first_name,
+                last_name,
+                email,
+                country,
+                total_purchases,
+                total_spent,
+                average_order_value,
+                last_purchase_date,
+                customer_status,
+                customer_segment,
+                registration_month,
+                registration_year,
+                created_at
+            )
             SELECT 
                 c.customer_id,
                 c.first_name,
@@ -152,29 +171,51 @@ BEGIN
                 ISNULL(SUM(s.total_amount), 0) AS total_spent,
                 ROUND(ISNULL(AVG(s.total_amount), 0), 2) AS average_order_value,
                 MAX(s.transaction_date) AS last_purchase_date,
-                c.status,
+                c.status AS customer_status,
                 CASE 
                     WHEN ISNULL(SUM(s.total_amount), 0) > 2000 THEN 'Gold'
                     WHEN ISNULL(SUM(s.total_amount), 0) > 1000 THEN 'Silver'
                     WHEN ISNULL(SUM(s.total_amount), 0) > 500 THEN 'Bronze'
                     ELSE 'Standard'
-                END,
-                MONTH(c.registration_date),
-                YEAR(c.registration_date),
-                GETDATE(),
-                GETDATE(),
-                NULL
+                END AS customer_segment,
+                MONTH(c.registration_date) AS registration_month,
+                YEAR(c.registration_date) AS registration_year,
+                GETDATE() AS created_at
             FROM silver_customers c
-            LEFT JOIN silver_sales s ON c.customer_id = s.customer_id AND s.order_status = 'Completed'
+            LEFT JOIN silver_sales s 
+                ON c.customer_id = s.customer_id 
+               AND s.order_status = 'Completed'
             WHERE c.customer_id = @customer_id
-            GROUP BY c.customer_id, c.first_name, c.last_name, c.email, c.country, c.status, c.registration_date;
+            GROUP BY 
+                c.customer_id, 
+                c.first_name, 
+                c.last_name, 
+                c.email, 
+                c.country, 
+                c.status, 
+                c.registration_date;
         END
         ELSE
         BEGIN
             -- Refresh all customers
-            DELETE FROM gold_customer_metrics;
+            TRUNCATE TABLE gold_customer_metrics;
             
-            INSERT INTO gold_customer_metrics
+            INSERT INTO gold_customer_metrics (
+                customer_id,
+                first_name,
+                last_name,
+                email,
+                country,
+                total_purchases,
+                total_spent,
+                average_order_value,
+                last_purchase_date,
+                customer_status,
+                customer_segment,
+                registration_month,
+                registration_year,
+                created_at
+            )
             SELECT 
                 c.customer_id,
                 c.first_name,
@@ -185,31 +226,39 @@ BEGIN
                 ISNULL(SUM(s.total_amount), 0) AS total_spent,
                 ROUND(ISNULL(AVG(s.total_amount), 0), 2) AS average_order_value,
                 MAX(s.transaction_date) AS last_purchase_date,
-                c.status,
+                c.status AS customer_status,
                 CASE 
                     WHEN ISNULL(SUM(s.total_amount), 0) > 2000 THEN 'Gold'
                     WHEN ISNULL(SUM(s.total_amount), 0) > 1000 THEN 'Silver'
                     WHEN ISNULL(SUM(s.total_amount), 0) > 500 THEN 'Bronze'
                     ELSE 'Standard'
-                END,
-                MONTH(c.registration_date),
-                YEAR(c.registration_date),
-                GETDATE(),
-                GETDATE(),
-                NULL
+                END AS customer_segment,
+                MONTH(c.registration_date) AS registration_month,
+                YEAR(c.registration_date) AS registration_year,
+                GETDATE() AS created_at
             FROM silver_customers c
-            LEFT JOIN silver_sales s ON c.customer_id = s.customer_id AND s.order_status = 'Completed'
-            GROUP BY c.customer_id, c.first_name, c.last_name, c.email, c.country, c.status, c.registration_date;
+            LEFT JOIN silver_sales s 
+                ON c.customer_id = s.customer_id 
+               AND s.order_status = 'Completed'
+            GROUP BY 
+                c.customer_id, 
+                c.first_name, 
+                c.last_name, 
+                c.email, 
+                c.country, 
+                c.status, 
+                c.registration_date;
         END
         
         COMMIT TRANSACTION;
         PRINT 'Customer metrics refreshed successfully';
     END TRY
     BEGIN CATCH
-        ROLLBACK TRANSACTION;
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION;
+            
         PRINT 'Error: ' + ERROR_MESSAGE();
         THROW;
     END CATCH
 END;
-GO
 
