@@ -32,8 +32,17 @@ SELECT TOP 5
         THEN 'Above Average'
         ELSE 'Below Average'
     END AS performance_vs_avg,
-    -- Calculate lifetime value with window function
-    ROUND(cm.total_spent * (1 + 0.05 * DATEDIFF(YEAR, cm.registration_date, GETDATE())), 2) AS projected_ltv
+    -- Calculate projected LTV using registration_year and registration_month
+    ROUND(
+        cm.total_spent * (
+            1 + 0.05 * DATEDIFF(
+                YEAR, 
+                DATEFROMPARTS(cm.registration_year, cm.registration_month, 1), 
+                GETDATE()
+            )
+        ), 
+        2
+    ) AS projected_ltv
 FROM gold_customer_metrics cm
 WHERE cm.customer_status = 'Active'
 ORDER BY cm.total_spent DESC;
@@ -231,12 +240,8 @@ SELECT
 FROM customer_rfm
 ORDER BY rfm_score DESC;
 
-/*
-═══════════════════════════════════════════════════════════════════════════════
-QUESTION 6: CHURN ANALYSIS
-"Which customers are at risk of leaving and why?"
-═══════════════════════════════════════════════════════════════════════════════
-*/
+USE GlobalShopDW;
+GO
 
 -- SOLUTION 6: Churn Risk Analysis
 -- CONCEPTS: Subqueries, CASE, Window Functions, Date Calculations
@@ -250,7 +255,7 @@ SELECT
     cm.last_purchase_date,
     DATEDIFF(DAY, cm.last_purchase_date, GETDATE()) AS days_since_last_purchase,
     DATEDIFF(DAY, c.registration_date, GETDATE()) AS customer_lifetime_days,
-    -- Average days between purchases
+    -- Average days between purchases (using c.registration_date)
     CASE 
         WHEN cm.total_purchases > 1
         THEN ROUND(DATEDIFF(DAY, c.registration_date, cm.last_purchase_date) / CAST(cm.total_purchases AS FLOAT), 0)
@@ -264,8 +269,8 @@ SELECT
         WHEN DATEDIFF(DAY, cm.last_purchase_date, GETDATE()) > 60 THEN 'Low'
         ELSE 'None'
     END AS churn_risk_level,
-    -- Estimated CLV loss if churned
-    ROUND(cm.average_order_value * 12 * (DATEDIFF(YEAR, cm.registration_date, GETDATE()) + 1), 2) AS estimated_annual_value_at_risk,
+    -- Estimated CLV loss if churned (using c.registration_date)
+    ROUND(cm.average_order_value * 12 * (DATEDIFF(YEAR, c.registration_date, GETDATE()) + 1), 2) AS estimated_annual_value_at_risk,
     -- Recommended retention action
     CASE 
         WHEN DATEDIFF(DAY, cm.last_purchase_date, GETDATE()) > 180 
@@ -288,7 +293,6 @@ ORDER BY
         ELSE 4
     END,
     cm.total_spent DESC;
-
 /*
 ═══════════════════════════════════════════════════════════════════════════════
 QUESTION 7: PAYMENT METHOD ANALYSIS
